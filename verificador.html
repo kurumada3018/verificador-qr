@@ -78,7 +78,9 @@
                         <p><strong>Vehículo:</strong> ${data.v.t}</p>
                         <p><strong>Modelo:</strong> ${data.v.m}</p>
                         <p><strong>Placa:</strong> ${data.v.p}</p><hr>
-                        <p><small>Código generado el: ${data.f || 'N/A'}</small></p>
+                        <p style="font-style: italic; color: #555; font-size: 0.9em;">
+    Generado el: ${data.f || 'N/A'} por <strong>${data.c || 'Desconocido'}</strong>
+</p>
                     `;
                 } else {
                     throw new Error("Estado de acceso no válido en el QR.");
@@ -107,3 +109,4 @@
 </body>
 
 </html>
+
