@@ -1,47 +1,89 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- ... (head sin cambios) ... -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Acceso</title>
+    <style>
+        body{font-family:sans-serif;max-width:600px;margin:20px auto;text-align:center}
+        #reader{width:300px;margin:20px auto;border:2px solid #ccc}
+        #result-container{margin-top:20px;padding:15px;border-radius:8px;text-align:left}
+        .result-success{background-color:#d4edda;color:#155724;border:1px solid #c3e6cb}
+        .result-error{background-color:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
+        .result-warning{background-color:#fff3cd;color:#856404;border:1px solid #ffeeba;}
+        h2{margin-top:0}
+        p{margin:5px 0}
+        #audit-info{font-style:italic;color:#666;font-size:.9em}
+        #start-scan-btn{padding:15px 30px;font-size:18px;cursor:pointer;background-color:#28a745;color:white;border:none;border-radius:5px}
+    </style>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
-    <!-- ... (body sin cambios hasta el script) ... -->
-    <script>
-        // ... (Tu URL de Gist de revocados aquí)
+    <h1>Verificador de Acceso con Auditoría</h1>
+    <p>Presione el botón y apunte la cámara al código QR.</p>
+    <button id="start-scan-btn">Iniciar Escáner</button>
+    <div id="reader" style="display:none;"></div>
+    <div id="result-container"></div>
 
-        // ... (La estructura del script hasta onScanSuccess no cambia)
+    <script>
+        const REVOCATION_LIST_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
+
+        const resultContainer = document.getElementById('result-container');
+        const startScanBtn = document.getElementById('start-scan-btn');
+        const readerDiv = document.getElementById('reader');
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
 
         async function onScanSuccess(decodedText, decodedResult) {
-            // ... (Lógica de detener escáner y try/catch sin cambios)
+            html5QrcodeScanner.clear().catch(error => { console.error("Fallo al detener el escáner.", error); });
+            readerDiv.style.display = 'none';
+            startScanBtn.style.display = 'block';
 
             try {
                 const data = JSON.parse(decodedText);
-                // ... (Lógica de ID y fecha de expiración sin cambios)
-                
-                // --- Verificación de expiración (sin cambios) ---
-                if (data.exp && data.exp !== 0 && new Date().getTime() > data.exp) {
-                    // ... (código de permiso expirado, sin cambios)
-                    return; 
+                const idFromQr = data.id ? String(data.id).trim() : '';
+                const now = new Date().getTime();
+
+                // 1. Verificación de Fecha de Caducidad
+                if (data.exp && data.exp !== 0 && now > data.exp) {
+                    resultContainer.className = 'result-warning';
+                    resultContainer.innerHTML = `
+                        <h2>⚠️ ACCESO DENEGADO (PERMISO EXPIRADO)</h2>
+                        <p><strong>Nombre:</strong> ${data.n}</p>
+                        <p><strong>Identificación:</strong> ${idFromQr}</p><hr>
+                        <p>El permiso de acceso para este código QR ha caducado.</p>
+                        <p><strong>Por favor, contacte con el administrador.</strong></p>
+                    `;
+                    return;
                 }
 
-                // ... (Lógica de lista de revocados sin cambios)
+                // 2. Verificación de Lista de Revocados
+                const urlToFetch = REVOCATION_LIST_URL + '?t=' + now;
+                const response = await fetch(urlToFetch);
+                if (!response.ok) throw new Error("No se pudo conectar al servicio de revocación.");
+                
+                const rawRevokedIds = await response.json();
+                const revokedIds = rawRevokedIds.map(id => String(id).trim());
 
                 if (revokedIds.includes(idFromQr)) {
-                    // ... (código de acceso revocado, sin cambios)
+                    resultContainer.className = 'result-error';
+                    resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO (REVOCADO)</h2><p><strong>Nombre:</strong> ${data.n}</p><p><strong>Identificación:</strong> ${idFromQr}</p>`;
                 } else if (data.e === "A") {
+                    // --- LÓGICA DE VISUALIZACIÓN MEJORADA ---
                     const validezInfo = data.exp && data.exp !== 0
-                        ? `Válido hasta: ${new Date(data.exp).toLocaleDateString('es-ES')}`
-                        : 'Permiso permanente';
+                        ? `Válido hasta el: <strong>${new Date(data.exp).toLocaleDateString('es-ES')}</strong>`
+                        : 'Permiso permanente (sin fecha de expiración)';
                     
-                    // --- NUEVA LÍNEA PARA EL PARQUEADERO ---
-                    const parqueaderoInfo = data.park ? `<p><strong>Parqueadero Asignado:</strong> ${data.park}</p>` : '';
+                    const parqueaderoInfo = data.park && data.park.trim() !== '' 
+                        ? `<p><strong>Parqueadero Asignado:</strong> ${data.park}</p>` 
+                        : '';
 
                     resultContainer.className = 'result-success';
                     resultContainer.innerHTML = `
                         <h2>✅ ACCESO PERMITIDO</h2>
                         <p><strong>Nombre:</strong> ${data.n}</p>
                         <p><strong>Identificación:</strong> ${idFromQr}</p>
-                        <p><strong>Validez:</strong> ${validezInfo}</p>
-                        ${parqueaderoInfo} <!-- Se inserta la información del parqueadero aquí -->
+                        <p>${validezInfo}</p>
+                        ${parqueaderoInfo}
                         <hr>
                         <p><strong>Vehículo:</strong> ${data.v.t}</p>
                         <p><strong>Modelo:</strong> ${data.v.m}</p>
@@ -54,11 +96,19 @@
                 }
 
             } catch (e) {
-                // ... (código de manejo de errores, sin cambios)
+                resultContainer.className = 'result-error';
+                resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO</h2><p><strong>Error:</strong> ${e.message}</p>`;
             }
         }
 
-        // ... (El resto del script no cambia)
+        function onScanFailure(error) {}
+        
+        startScanBtn.addEventListener('click', () => {
+            resultContainer.innerHTML = '';
+            startScanBtn.style.display = 'none';
+            readerDiv.style.display = 'block';
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        });
     </script>
 </body>
 </html>
