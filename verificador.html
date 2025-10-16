@@ -1,84 +1,64 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificador de Acceso</title>
-    <!-- Estilos (sin cambios) -->
-    <style>body{font-family:sans-serif;max-width:600px;margin:20px auto;text-align:center}#reader{width:300px;margin:20px auto;border:2px solid #ccc}#result-container{margin-top:20px;padding:15px;border-radius:8px;text-align:left}.result-success{background-color:#d4edda;color:#155724;border:1px solid #c3e6cb}.result-error{background-color:#f8d7da;color:#721c24;border:1px solid #f5c6cb}h2{margin-top:0}p{margin:5px 0}#audit-info{font-style:italic;color:#666;font-size:.9em}#start-scan-btn{padding:15px 30px;font-size:18px;cursor:pointer;background-color:#28a745;color:white;border:none;border-radius:5px}</style>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- ... (head sin cambios) ... -->
 </head>
 <body>
-    <h1>Verificador de Acceso con Auditoría</h1>
-    <p>Presione el botón y apunte la cámara al código QR.</p>
-    <button id="start-scan-btn">Iniciar Escáner</button>
-    <div id="reader" style="display:none;"></div>
-    <div id="result-container"></div>
-
+    <!-- ... (body sin cambios hasta el script) ... -->
     <script>
-        const REVOCATION_LIST_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
+        // ... (Tu URL de Gist de revocados aquí)
 
-        const resultContainer = document.getElementById('result-container');
-        const startScanBtn = document.getElementById('start-scan-btn');
-        const readerDiv = document.getElementById('reader');
-
-        // --- CAMBIO PRINCIPAL: Creamos el objeto del escáner UNA SOLA VEZ ---
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", 
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            /* verbose= */ false
-        );
+        // ... (La estructura del script hasta onScanSuccess no cambia)
 
         async function onScanSuccess(decodedText, decodedResult) {
-            // Detenemos el escáner y la cámara
-            html5QrcodeScanner.clear().catch(error => {
-                console.error("Fallo al detener el escáner.", error);
-            });
-
-            // Mostramos el botón de nuevo y ocultamos el visor de la cámara
-            readerDiv.style.display = 'none';
-            startScanBtn.style.display = 'block';
+            // ... (Lógica de detener escáner y try/catch sin cambios)
 
             try {
                 const data = JSON.parse(decodedText);
-                const idFromQr = data.id ? String(data.id).trim() : '';
-
-                const urlToFetch = REVOCATION_LIST_URL + '?t=' + new Date().getTime();
-                const response = await fetch(urlToFetch);
-                if (!response.ok) throw new Error("No se pudo conectar al servicio de revocación.");
+                // ... (Lógica de ID y fecha de expiración sin cambios)
                 
-                const rawRevokedIds = await response.json();
-                const revokedIds = rawRevokedIds.map(id => String(id).trim());
+                // --- Verificación de expiración (sin cambios) ---
+                if (data.exp && data.exp !== 0 && new Date().getTime() > data.exp) {
+                    // ... (código de permiso expirado, sin cambios)
+                    return; 
+                }
+
+                // ... (Lógica de lista de revocados sin cambios)
 
                 if (revokedIds.includes(idFromQr)) {
-                    resultContainer.className = 'result-error';
-                    resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO (REVOCADO)</h2><p><strong>Nombre:</strong> ${data.n}</p><p><strong>Identificación:</strong> ${idFromQr}</p>`;
+                    // ... (código de acceso revocado, sin cambios)
                 } else if (data.e === "A") {
+                    const validezInfo = data.exp && data.exp !== 0
+                        ? `Válido hasta: ${new Date(data.exp).toLocaleDateString('es-ES')}`
+                        : 'Permiso permanente';
+                    
+                    // --- NUEVA LÍNEA PARA EL PARQUEADERO ---
+                    const parqueaderoInfo = data.park ? `<p><strong>Parqueadero Asignado:</strong> ${data.park}</p>` : '';
+
                     resultContainer.className = 'result-success';
-                    resultContainer.innerHTML = `<h2>✅ ACCESO PERMITIDO</h2><p><strong>Nombre:</strong> ${data.n}</p><p><strong>Identificación:</strong> ${idFromQr}</p><hr><p><strong>Vehículo:</strong> ${data.v.t}</p><p><strong>Modelo:</strong> ${data.v.m}</p><p><strong>Placa:</strong> ${data.v.p}</p><hr><p id="audit-info">Generado el: ${data.f || 'N/A'} por <strong>${data.c || 'Desconocido'}</strong></p>`;
+                    resultContainer.innerHTML = `
+                        <h2>✅ ACCESO PERMITIDO</h2>
+                        <p><strong>Nombre:</strong> ${data.n}</p>
+                        <p><strong>Identificación:</strong> ${idFromQr}</p>
+                        <p><strong>Validez:</strong> ${validezInfo}</p>
+                        ${parqueaderoInfo} <!-- Se inserta la información del parqueadero aquí -->
+                        <hr>
+                        <p><strong>Vehículo:</strong> ${data.v.t}</p>
+                        <p><strong>Modelo:</strong> ${data.v.m}</p>
+                        <p><strong>Placa:</strong> ${data.v.p}</p>
+                        <hr>
+                        <p id="audit-info">Generado el: ${data.f || 'N/A'} por <strong>${data.c || 'Desconocido'}</strong></p>
+                    `;
                 } else {
                     throw new Error("Estado de acceso no válido.");
                 }
 
             } catch (e) {
-                resultContainer.className = 'result-error';
-                resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO</h2><p><strong>Error:</strong> ${e.message}</p>`;
+                // ... (código de manejo de errores, sin cambios)
             }
         }
 
-        function onScanFailure(error) {
-            // No hacemos nada aquí para que el escáner siga intentando leer.
-        }
-        
-        // El botón ahora solo se encarga de iniciar el renderizado del escáner
-        startScanBtn.addEventListener('click', () => {
-            resultContainer.innerHTML = '';
-            startScanBtn.style.display = 'none';
-            readerDiv.style.display = 'block';
-            
-            // Usamos el objeto que ya creamos y lo activamos
-            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-        });
+        // ... (El resto del script no cambia)
     </script>
 </body>
 </html>
