@@ -3,94 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificador de Acceso v3 - Optimizado</title>
-    <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; text-align: center; }
-        #reader { width: 300px; margin: 20px auto; border: 2px solid #ccc; }
-        #result-container { margin-top: 20px; padding: 15px; border-radius: 8px; text-align: left; }
-        .result-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .result-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        h2 { margin-top: 0; }
-        p { margin: 5px 0; }
-        strong { color: #333; }
-        #start-scan-btn { padding: 15px 30px; font-size: 18px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 5px; }
-        #loading-spinner { display: none; margin-top: 20px; }
-    </style>
+    <title>Verificador de Acceso (MODO DEPURACIÓN)</title>
+    <!-- Estilos (sin cambios) -->
+    <style>body{font-family:sans-serif;max-width:600px;margin:20px auto;text-align:center}#reader{width:300px;margin:20px auto;border:2px solid #ccc}#result-container{margin-top:20px;padding:15px;border-radius:8px;text-align:left}.result-success{background-color:#d4edda;color:#155724;border:1px solid #c3e6cb}.result-error{background-color:#f8d7da;color:#721c24;border:1px solid #f5c6cb}h2{margin-top:0}p{margin:5px 0}#audit-info{font-style:italic;color:#666;font-size:.9em}#start-scan-btn{padding:15px 30px;font-size:18px;cursor:pointer;background-color:#28a745;color:white;border:none;border-radius:5px}</style>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
-    <h1>Verificador de Acceso con Revocación</h1>
+    <h1>Verificador de Acceso con Auditoría</h1>
     <p>Presione el botón y apunte la cámara al código QR.</p>
     <button id="start-scan-btn">Iniciar Escáner</button>
     <div id="reader" style="display:none;"></div>
-    <div id="loading-spinner">Verificando estado...</div>
     <div id="result-container"></div>
+
     <script>
-        const REVOCATION_LIST_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/7913e22b7e22860cb312dbc8775a14509ac9e256/lista_revocados.json'; // <-- RECUERDA PONER TU URL
+        // <-- 🔴 ¡MUY IMPORTANTE! ASEGÚRATE DE QUE ESTA URL SEA LA CORRECTA
+        const REVOCATION_LIST_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
         const resultContainer = document.getElementById('result-container');
         const startScanBtn = document.getElementById('start-scan-btn');
         const readerDiv = document.getElementById('reader');
-        const loadingSpinner = document.getElementById('loading-spinner');
         let html5QrcodeScanner;
 
-        function stopScanner() {
-            if (html5QrcodeScanner && html5QrcodeScanner.getState() === 2) {
-                html5QrcodeScanner.clear().catch(error => console.error("Fallo al detener.", error));
-            }
-            readerDiv.style.display = 'none';
-            startScanBtn.style.display = 'block';
-            loadingSpinner.style.display = 'none';
-        }
+        function stopScanner() { if (html5QrcodeScanner && html5QrcodeScanner.getState() === 2) { html5QrcodeScanner.clear().catch(error => console.error("Fallo al detener.", error)); } readerDiv.style.display = 'none'; startScanBtn.style.display = 'block'; }
 
         async function onScanSuccess(decodedText, decodedResult) {
-            loadingSpinner.style.display = 'block';
             stopScanner();
+            console.clear(); // Limpia la consola para cada nuevo escaneo
+            console.log("--- INICIANDO VERIFICACIÓN ---");
 
             try {
                 const data = JSON.parse(decodedText);
 
-                // Verificamos usando las claves cortas
-                if (!data.n || !data.id || !data.e || !data.v) {
-                    throw new Error("El código QR no contiene datos de acceso válidos.");
-                }
+                // --- LÍNEAS DE DEPURACIÓN ---
+                console.log("1. Datos extraídos del QR:", data);
+                console.log("2. ID a verificar:", data.id, "(Tipo:", typeof data.id, ")");
 
                 const response = await fetch(REVOCATION_LIST_URL + '?t=' + new Date().getTime());
-                if (!response.ok) {
-                    throw new Error("No se pudo conectar al servicio de verificación de estado.");
-                }
+                if (!response.ok) throw new Error("No se pudo conectar al servicio de revocación.");
                 const revokedIds = await response.json();
+
+                // --- MÁS LÍNEAS DE DEPURACIÓN ---
+                console.log("3. Lista de revocados descargada de GitHub:", revokedIds);
+                console.log("4. ¿El ID del QR está en la lista de revocados?", revokedIds.includes(data.id));
+                console.log("--- FIN DE VERIFICACIÓN ---");
+
 
                 if (revokedIds.includes(data.id)) {
                     resultContainer.className = 'result-error';
-                    resultContainer.innerHTML = `
-                        <h2>❌ ACCESO DENEGADO (REVOCADO)</h2>
-                        <p>El acceso para esta persona ha sido revocado.</p><hr>
-                        <p><strong>Nombre:</strong> ${data.n}</p>
-                        <p><strong>Identificación:</strong> ${data.id}</p>
-                    `;
-                } else if (data.e === "A") { // Verificamos si el estado es "A" (Autorizado)
+                    resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO (REVOCADO)</h2><p><strong>Nombre:</strong> ${data.n}</p><p><strong>Identificación:</strong> ${data.id}</p>`;
+                } else if (data.e === "A") {
                     resultContainer.className = 'result-success';
-                    resultContainer.innerHTML = `
-                        <h2>✅ ACCESO PERMITIDO</h2>
-                        <p><strong>Nombre:</strong> ${data.n}</p>
-                        <p><strong>Identificación:</strong> ${data.id}</p><hr>
-                        <p><strong>Vehículo:</strong> ${data.v.t}</p>
-                        <p><strong>Modelo:</strong> ${data.v.m}</p>
-                        <p><strong>Placa:</strong> ${data.v.p}</p><hr>
-                        <p style="font-style: italic; color: #555; font-size: 0.9em;">
-    Generado el: ${data.f || 'N/A'} por <strong>${data.c || 'Desconocido'}</strong>
-</p>
-                    `;
+                    resultContainer.innerHTML = `<h2>✅ ACCESO PERMITIDO</h2><p><strong>Nombre:</strong> ${data.n}</p><p><strong>Identificación:</strong> ${data.id}</p><hr><p><strong>Vehículo:</strong> ${data.v.t}</p><p><strong>Modelo:</strong> ${data.v.m}</p><p><strong>Placa:</strong> ${data.v.p}</p><hr><p id="audit-info">Generado el: ${data.f || 'N/A'} por <strong>${data.c || 'Desconocido'}</strong></p>`;
                 } else {
-                    throw new Error("Estado de acceso no válido en el QR.");
+                    throw new Error("Estado de acceso no válido.");
                 }
 
             } catch (e) {
                 resultContainer.className = 'result-error';
                 resultContainer.innerHTML = `<h2>❌ ACCESO DENEGADO</h2><p><strong>Error:</strong> ${e.message}</p>`;
-            } finally {
-                loadingSpinner.style.display = 'none';
+                console.error("Error durante el proceso:", e);
             }
         }
 
@@ -106,7 +77,3 @@
     </script>
 </body>
 </html>
-</body>
-
-</html>
-
