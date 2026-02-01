@@ -2,105 +2,130 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>VERIFICADOR V5.1 - FINAL</title>
+    <title>VERIFICADOR PUENTE ARANDA - RACOI</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
-        #reader { width: 100%; max-width: 400px; margin: auto; border: 3px solid #00ff00; background: black; }
-        #res { margin-top: 20px; padding: 20px; border-radius: 10px; display: none; text-align: left; }
-        .ok { background: #1b5e20; border: 2px solid #2e7d32; } 
-        .bad { background: #b71c1c; border: 2px solid #d32f2f; } 
-        .exp { background: #e65100; border: 2px solid #ef6c00; }
-        button { padding: 15px; background: #00ff00; color: black; border: none; cursor: pointer; width: 100%; max-width: 400px; font-weight: bold; border-radius: 5px; font-size: 16px; }
-        #debug-panel { background: #222; color: #00ff00; padding: 10px; font-family: monospace; font-size: 11px; margin-top: 20px; text-align: left; word-break: break-all; border-radius: 5px; border: 1px solid #444; }
+        :root { --success: #2ecc71; --error: #e74c3c; --warning: #f1c40f; --dark: #1a1a2e; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        h2 { color: var(--success); text-transform: uppercase; letter-spacing: 2px; }
+        
+        #reader { width: 100%; max-width: 400px; border: 4px solid #333; border-radius: 12px; overflow: hidden; }
+        
+        #res { width: 100%; max-width: 400px; margin-top: 20px; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+        .ok { background: #1b5e20; border-left: 10px solid var(--success); }
+        .bad { background: #7b1313; border-left: 10px solid var(--error); }
+        .exp { background: #855406; border-left: 10px solid var(--warning); }
+
+        button { padding: 15px 25px; background: var(--success); color: var(--dark); border: none; cursor: pointer; font-weight: bold; border-radius: 8px; font-size: 16px; margin-bottom: 20px; width: 100%; max-width: 400px; }
+        
+        /* Historial */
+        .history-container { width: 100%; max-width: 500px; margin-top: 30px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; border-bottom: 1px solid #444; padding: 8px; color: #888; }
+        td { padding: 8px; border-bottom: 1px solid #333; }
+        .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
     </style>
 </head>
 <body>
-    <h2>SISTEMA DE VERIFICACIÓN V5.1</h2>
-    <button id="btn">INICIAR ESCÁNER</button>
+
+    <h2>Escáner de Seguridad</h2>
+    <button id="btn-start">ACTIVAR CÁMARA</button>
     
-    <div id="reader" style="display:none; margin-top:20px;"></div>
+    <div id="reader" style="display:none"></div>
     <div id="res"></div>
-    
-    <div id="debug-panel">
-        <strong>MONITOR:</strong><br>
-        1. Sistema listo.
+
+    <div class="history-container">
+        <h3>Historial Reciente</h3>
+        <table>
+            <thead><tr><th>Hora</th><th>Nombre</th><th>Placa</th><th>Estado</th></tr></thead>
+            <tbody id="historial-body"></tbody>
+        </table>
     </div>
 
 <script>
-    // LLAVE Y URL (Asegúrate de que sean las mismas)
     const LLAVE_MAESTRA = "LLAVE_UNIVERSAL_99"; 
     const LISTA_NEGRA = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
-    const scanner = new Html5QrcodeScanner("reader", { 
-        fps: 20, 
-        qrbox: { width: 250, height: 250 } 
-    });
+    const scanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: 250 });
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    const debug = document.getElementById('debug-panel');
+    // Función para generar sonidos sin archivos externos
+    function playTone(freq, type, duration) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    }
 
-    async function alEscanear(texto) {
-        debug.innerHTML = `<strong>MONITOR:</strong><br>2. QR detectado.`;
+    function addHistory(nombre, placa, estado, color) {
+        const body = document.getElementById('historial-body');
+        const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const row = `<tr>
+            <td>${now}</td>
+            <td>${nombre}</td>
+            <td>${placa}</td>
+            <td><span class="status-dot" style="background:${color}"></span>${estado}</td>
+        </tr>`;
+        body.innerHTML = row + body.innerHTML;
+        // Limitar a los últimos 10
+        if(body.rows.length > 10) body.deleteRow(10);
+    }
+
+    async function onScan(texto) {
         const div = document.getElementById('res');
         div.style.display = 'block';
 
         try {
-            // 1. DESENCRIPTAR
             const bytes = CryptoJS.AES.decrypt(texto, LLAVE_MAESTRA);
             const decoded = bytes.toString(CryptoJS.enc.Utf8);
-            
-            if(!decoded || decoded === "") throw new Error("Llave incorrecta");
+            if(!decoded) throw new Error();
 
-            // 2. SEPARAR DATOS (Ya no usamos JSON.parse, usamos split)
             const d = decoded.split('|');
-            debug.innerHTML += `<br>3. Desencriptado OK: ${d[1]}`;
+            const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
+            const revok = await r.json();
 
-            // 3. CONSULTAR LISTA DE REVOCADOS
-            let revoked = [];
-            try {
-                const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
-                revoked = await r.json();
-            } catch(e) { console.log("Error consultando lista negra, procediendo..."); }
-
-            // 4. LÓGICA DE RESULTADOS
-            // d[2] es la Cédula/ID, d[7] es la fecha de expiración
-            if (revoked.includes(d[2])) {
+            if (revok.includes(d[2])) {
+                playTone(100, 'sawtooth', 0.5); // Sonido Error
                 div.className = "bad";
-                div.innerHTML = "<h2>❌ ACCESO REVOCADO</h2><p>Esta identificación ha sido bloqueada por seguridad.</p>";
+                div.innerHTML = "<h2>❌ REVOCADO</h2><p>Acceso denegado por seguridad.</p>";
+                addHistory(d[1], d[6], "REVOCADO", "#e74c3c");
             } 
             else if (d[7] != "0" && Date.now() > parseInt(d[7])) {
+                playTone(300, 'sine', 0.2); setTimeout(() => playTone(300, 'sine', 0.2), 300); // Sonido Advertencia
                 div.className = "exp";
-                div.innerHTML = `<h2>⚠️ ACCESO NO PERMITIDO</h2><p>El permiso caducó el: ${new Date(parseInt(d[7])).toLocaleDateString()}</p><p>CONTACTE AL ADMINISTRADOR.</p>`;
+                div.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>Permiso vencido.</p>";
+                addHistory(d[1], d[6], "EXPIRADO", "#f1c40f");
             } 
             else {
+                playTone(880, 'sine', 0.2); // Sonido Éxito
                 div.className = "ok";
                 div.innerHTML = `
-                    <h2>✅ ACCESO PERMITIDO</h2>
+                    <h2>✅ PERMITIDO</h2>
                     <p><strong>${d[0]} ${d[1]}</strong></p>
-                    <p>ID: ${d[2]} | Dep: ${d[3]}</p>
-                    <hr>
-                    <p>Vehículo: ${d[4]} - Color: ${d[5]}</p>
-                    <p>Placa: <strong>${d[6]}</strong></p>
-                    <hr>
-                    <small>Autorizado por: ${d[8]}</small>
+                    <p>ID: ${d[2]} | Placa: ${d[6]}</p>
                 `;
+                addHistory(d[1], d[6], "OK", "#2ecc71");
             }
-            
-            scanner.clear(); // Detener cámara tras éxito
+            scanner.clear();
             document.getElementById('reader').style.display = 'none';
-
         } catch(e) {
+            playTone(150, 'square', 0.5);
             div.className = "bad";
-            div.innerHTML = `<h2>❌ ERROR DE LECTURA</h2><p>El código QR no es válido para este sistema.</p>`;
-            debug.innerHTML += `<br><span style="color:red">ERROR: ${e.message}</span>`;
+            div.innerHTML = "<h2>❌ ERROR</h2><p>QR no válido.</p>";
         }
     }
 
-    document.getElementById('btn').onclick = () => {
+    document.getElementById('btn-start').onclick = () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         document.getElementById('reader').style.display = 'block';
-        document.getElementById('res').style.display = 'none';
-        scanner.render(alEscanear);
+        scanner.render(onScan);
     };
 </script>
 </body>
