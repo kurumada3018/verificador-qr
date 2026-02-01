@@ -1,80 +1,78 @@
-<!-- ... (Mantener estilos igual) ... -->
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Acceso</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f4f4; }
+        #reader { width: 100%; max-width: 400px; margin: auto; border: 5px solid #333; }
+        #result { margin-top: 20px; padding: 20px; border-radius: 10px; display: none; text-align: left; }
+        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+        button { padding: 15px 25px; font-size: 1.1em; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Escáner de Acceso Seguro</h1>
+    <button id="btn-start">Abrir Cámara</button>
+    <div id="reader" style="display:none"></div>
+    <div id="result"></div>
 
-<!-- ... (Mantener HTML igual) ... -->
+    <script>
+        const SECRET_KEY = "TU_LLAVE_AQUI"; // DEBE SER IGUAL AL DEL GENERADOR
+        const REVOKED_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
-<script>
-    // CONFIGURACIÓN - DEBE SER LA MISMA QUE EN EL GENERADOR
-    const SECRET_KEY = "Colombia2026//";
-    const REVOCATION_LIST_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
+        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
 
-    const resultContainer = document.getElementById('result-container');
-    const startScanBtn = document.getElementById('start-scan-btn');
-    const readerDiv = document.getElementById('reader');
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+        async function onScanSuccess(text) {
+            scanner.clear();
+            document.getElementById('reader').style.display = 'none';
+            const resDiv = document.getElementById('result');
+            resDiv.style.display = 'block';
 
-    async function onScanSuccess(decodedText, decodedResult) {
-        html5QrcodeScanner.clear().catch(e => console.error(e));
-        readerDiv.style.display = 'none';
-        startScanBtn.style.display = 'block';
-
-        try {
-            // --- DESENCRIPTACIÓN ---
-            let bytes;
             try {
-                bytes = CryptoJS.AES.decrypt(decodedText, SECRET_KEY);
-                if (bytes.toString().length === 0) throw new Error();
-            } catch (err) {
-                throw new Error("Código QR inválido o cifrado desconocido.");
+                // DESENCRIPTAR
+                const bytes = CryptoJS.AES.decrypt(text, SECRET_KEY);
+                const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+                if (!decryptedText) throw new Error("Código no válido");
+
+                const data = JSON.parse(decryptedText);
+                
+                // Verificar Revocación
+                const resp = await fetch(REVOKED_URL + '?t=' + Date.now());
+                const revoked = await resp.json();
+
+                if (revoked.includes(data.id)) {
+                    resDiv.className = "error";
+                    resDiv.innerHTML = "<h2>❌ ACCESO REVOCADO</h2><p>El ID " + data.id + " está bloqueado.</p>";
+                } else if (data.exp !== 0 && Date.now() > data.exp) {
+                    resDiv.className = "error";
+                    resDiv.innerHTML = "<h2>⚠️ PERMISO EXPIRADO</h2><p>Venció el: " + new Date(data.exp).toLocaleDateString() + "</p>";
+                } else {
+                    resDiv.className = "success";
+                    resDiv.innerHTML = `
+                        <h2>✅ ACCESO PERMITIDO</h2>
+                        <p><strong>Nombre:</strong> ${data.n}</p>
+                        <p><strong>Placa:</strong> ${data.v.p}</p>
+                        <p><strong>Parqueadero:</strong> ${data.park || 'N/A'}</p>
+                        <hr>
+                        <small>Generado por: ${data.c} el ${data.f}</small>
+                    `;
+                }
+            } catch (e) {
+                resDiv.className = "error";
+                resDiv.innerHTML = "<h2>❌ ERROR</h2><p>Código QR no reconocido o dañado.</p>";
             }
-
-            const decryptedData = bytes.toString(CryptoJS.enc.Utf8);
-            const data = JSON.parse(decryptedData);
-            
-            const idFromQr = data.id ? String(data.id).trim() : '';
-            const now = new Date().getTime();
-
-            // 1. Verificación de Expiración
-            if (data.exp && data.exp !== 0 && now > data.exp) {
-                resultContainer.className = 'result-warning';
-                resultContainer.innerHTML = `<h2>⚠️ EXPIRADO</h2><p>Venció el: ${new Date(data.exp).toLocaleDateString()}</p>`;
-                return;
-            }
-
-            // 2. Verificación de Revocados (GitHub)
-            const response = await fetch(REVOCATION_LIST_URL + '?t=' + now);
-            const rawRevokedIds = await response.json();
-            const revokedIds = rawRevokedIds.map(id => String(id).trim());
-
-            if (revokedIds.includes(idFromQr)) {
-                resultContainer.className = 'result-error';
-                resultContainer.innerHTML = `<h2>❌ ACCESO REVOCADO</h2><p>ID: ${idFromQr} bloqueado por seguridad.</p>`;
-            } else {
-                // EXITO: Mostrar datos y quién lo creó (data.c)
-                const validezInfo = data.exp && data.exp !== 0
-                    ? `Vence: <strong>${new Date(data.exp).toLocaleDateString('es-ES')}</strong>`
-                    : 'Permiso Permanente';
-
-                resultContainer.className = 'result-success';
-                resultContainer.innerHTML = `
-                    <h2>✅ ACCESO PERMITIDO</h2>
-                    <p><strong>Titular:</strong> ${data.n}</p>
-                    <p><strong>ID:</strong> ${idFromQr}</p>
-                    <p><strong>Parqueo:</strong> ${data.park || 'No asignado'}</p>
-                    <hr>
-                    <p><strong>Vehículo:</strong> ${data.v.t} - ${data.v.p}</p>
-                    <p><strong>Modelo:</strong> ${data.v.m}</p>
-                    <hr>
-                    <p id="audit-info">Auditado: Generado por <strong>${data.c}</strong> el ${data.f}</p>
-                `;
-            }
-
-        } catch (e) {
-            resultContainer.className = 'result-error';
-            resultContainer.innerHTML = `<h2>❌ ERROR DE LECTURA</h2><p>El código no es válido o está corrupto.</p>`;
         }
-    }
-    // ... (Mantener resto de funciones igual) ...
-</script>
 
+        document.getElementById('btn-start').onclick = () => {
+            document.getElementById('reader').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            scanner.render(onScanSuccess);
+        };
+    </script>
+</body>
+</html>
