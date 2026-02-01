@@ -1,89 +1,48 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificador de Seguridad</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 15px; background: #121212; color: white; }
-        #reader { width: 100%; max-width: 450px; margin: auto; border: 4px solid #444; border-radius: 10px; overflow: hidden; background: black; }
-        #result { margin-top: 20px; padding: 20px; border-radius: 10px; display: none; text-align: left; font-size: 16px; }
-        .success { background: #1b5e20; border: 2px solid #2e7d32; }
-        .error { background: #b71c1c; border: 2px solid #d32f2f; }
-        .warning { background: #e65100; border: 2px solid #ef6c00; }
-        h2 { margin-top: 0; text-transform: uppercase; font-size: 20px; }
-        p { margin: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #0277bd; color: white; border: none; border-radius: 5px; font-weight: bold; }
-        hr { border: 0; border-top: 1px solid rgba(255,255,255,0.3); }
-    </style>
-</head>
-<body>
-    <h1>VERIFICADOR DE ACCESO</h1>
-    <button id="btn-scan">INICIAR ESCÁNER</button>
-    <div id="reader" style="display:none; margin-top:20px;"></div>
-    <div id="result"></div>
+// --- REEMPLAZA TODA TU FUNCIÓN onScanSuccess POR ESTA ---
+async function onScanSuccess(text) {
+    // scanner.clear(); // Comenta esta línea temporalmente para ver el error sin que se cierre
+    const resDiv = document.getElementById('result');
+    resDiv.style.display = 'block';
 
-<script>
-    const SECRET_KEY = "Colombia2026"; 
-    const REVOKED_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
-    const scanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: 280 });
+    try {
+        console.log("1. QR detectado:", text);
 
-    async function onScanSuccess(text) {
-        scanner.clear();
-        document.getElementById('reader').style.display = 'none';
-        const resDiv = document.getElementById('result');
-        resDiv.style.display = 'block';
+        // INTENTO DE DESENCRIPTAR
+        const bytes = CryptoJS.AES.decrypt(text, SECRET_KEY);
+        const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
 
-        try {
-            const bytes = CryptoJS.AES.decrypt(text, SECRET_KEY);
-            const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-            if (!decryptedText) throw new Error();
-            const d = JSON.parse(decryptedText);
-            
-            const resp = await fetch(REVOKED_URL + '?t=' + Date.now());
-            const revoked = await resp.json();
-
-            // 1. Verificar Revocación manual (GitHub)
-            if (revoked.includes(d.id)) {
-                resDiv.className = "error";
-                resDiv.innerHTML = "<h2>❌ ACCESO DENEGADO</h2><p><strong>Identidad Revocada:</strong> El acceso ha sido bloqueado manualmente por seguridad.</p>";
-            } 
-            // 2. Verificar Expiración por fecha
-            else if (d.exp !== 0 && Date.now() > d.exp) {
-                resDiv.className = "warning";
-                resDiv.innerHTML = `<h2>⚠️ ACCESO NO PERMITIDO</h2><p><strong>EL PERMISO HA EXPIRADO EL:</strong> ${new Date(d.exp).toLocaleDateString()}</p><hr><p>CONTACTE CON EL ADMINISTRADOR PARA RENOVAR.</p>`;
-            } 
-            // 3. Acceso Permitido
-            else {
-                resDiv.className = "success";
-                resDiv.innerHTML = `
-                    <h2>✅ ACCESO PERMITIDO</h2>
-                    <p><strong>Grado:</strong> ${d.g}</p>
-                    <p><strong>Nombres:</strong> ${d.n}</p>
-                    <p><strong>Cédula:</strong> ${d.id}</p>
-                    <p><strong>Dependencia:</strong> ${d.d}</p>
-                    <hr>
-                    <p><strong>Vehículo:</strong> ${d.vt} (${d.vc})</p>
-                    <p><strong>Placa:</strong> ${d.vp}</p>
-                    <hr>
-                    <small>Emitido por: ${d.c} - ${d.f}</small>
-                `;
-            }
-        } catch (e) {
-            resDiv.className = "error";
-            resDiv.innerHTML = "<h2>❌ ERROR</h2><p>Código QR no válido o llave de seguridad incorrecta.</p>";
+        if (!decryptedText) {
+            // Si entra aquí, el texto escaneado no coincide con la llave
+            throw new Error("Llave incorrecta o texto corrupto");
         }
+
+        const d = JSON.parse(decryptedText);
+        console.log("2. Datos abiertos:", d);
+
+        // Lógica de visualización (ajustada a los nombres cortos)
+        if (d.e !== 0 && Date.now() > d.e) {
+            resDiv.className = "warning";
+            resDiv.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>Acceso denegado.</p>";
+        } else {
+            resDiv.className = "success";
+            resDiv.innerHTML = `
+                <h2>✅ PERMITIDO</h2>
+                <p><strong>Grado:</strong> ${d.g}</p>
+                <p><strong>Nombres:</strong> ${d.n}</p>
+                <p><strong>Cédula:</strong> ${d.i}</p>
+                <p><strong>Placa:</strong> ${d.p}</p>
+            `;
+        }
+    } catch (e) {
+        console.error("Error detallado:", e);
+        resDiv.className = "error";
+        // ESTO NOS MOSTRARÁ QUÉ ESTÁ LEYENDO LA CÁMARA
+        resDiv.innerHTML = `
+            <h2>❌ ERROR DE SEGURIDAD</h2>
+            <p>El código no se pudo desencriptar.</p>
+            <p style="font-size:10px; word-break: break-all;">
+                <strong>Texto leído:</strong> ${text.substring(0, 50)}...
+            </p>
+        `;
     }
-
-    document.getElementById('btn-scan').onclick = () => {
-        document.getElementById('reader').style.display = 'block';
-        document.getElementById('result').style.display = 'none';
-        scanner.render(onScanSuccess);
-    };
-</script>
-</body>
-</html>
-
-
+}
