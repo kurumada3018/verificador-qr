@@ -3,50 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VERIFICADOR V6.1 - ESTABLE</title>
+    <title>VERIFICADOR PRO V6.2</title>
+    <!-- Librerías Externas -->
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        :root { --success: #2ecc71; --error: #e74c3c; --warning: #f1c40f; --dark: #1a1a2e; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        h2 { color: var(--success); text-transform: uppercase; letter-spacing: 2px; text-align: center; }
-        #reader { width: 100%; max-width: 400px; border: 4px solid #333; border-radius: 12px; overflow: hidden; background: #000; }
-        #res { width: 100%; max-width: 400px; margin-top: 20px; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.5); border-left: 10px solid; }
+        :root { 
+            --success: #2ecc71; 
+            --error: #e74c3c; 
+            --warning: #f1c40f; 
+            --dark: #1a1a2e; 
+            --plate: #f1c40f;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            background: var(--dark); 
+            color: white; 
+            margin: 0; 
+            padding: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            min-height: 100vh; 
+        }
+
+        h2 { color: var(--success); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; }
+
+        /* Contenedor del Escáner */
+        #reader { 
+            width: 100%; 
+            max-width: 450px; 
+            border: 4px solid #333; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Tarjeta de Resultados */
+        #res { 
+            width: 100%; 
+            max-width: 450px; 
+            margin-top: 20px; 
+            padding: 20px; 
+            border-radius: 12px; 
+            display: none; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+            border-left: 10px solid;
+            box-sizing: border-box;
+        }
         .ok { background: #1b5e20; border-color: var(--success); }
         .bad { background: #7b1313; border-color: var(--error); }
         .exp { background: #855406; border-color: var(--warning); }
-        button { padding: 15px 25px; background: var(--success); color: var(--dark); border: none; cursor: pointer; font-weight: bold; border-radius: 8px; font-size: 16px; margin-bottom: 20px; width: 100%; max-width: 400px; transition: 0.3s; }
+
+        /* Estilos de la Ficha de Datos */
+        .info-label { color: rgba(255,255,255,0.7); font-size: 0.85em; margin-bottom: 2px; text-transform: uppercase; }
+        .info-value { font-size: 1.1em; font-weight: bold; margin-bottom: 12px; }
+        .plate-box { 
+            background: var(--plate); 
+            color: #000; 
+            padding: 5px 15px; 
+            border-radius: 6px; 
+            display: inline-block; 
+            font-size: 1.4em; 
+            font-weight: 900; 
+            margin-top: 5px;
+            border: 2px solid #000;
+        }
+
+        button { 
+            padding: 15px 25px; 
+            background: var(--success); 
+            color: var(--dark); 
+            border: none; 
+            cursor: pointer; 
+            font-weight: bold; 
+            border-radius: 10px; 
+            font-size: 16px; 
+            margin-bottom: 20px; 
+            width: 100%; 
+            max-width: 450px; 
+            transition: 0.3s;
+        }
         button:hover { opacity: 0.9; transform: scale(0.98); }
-        .history-container { width: 100%; max-width: 500px; margin-top: 30px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; font-size: 12px; }
+
+        /* Historial */
+        .history-container { 
+            width: 100%; 
+            max-width: 500px; 
+            margin-top: 30px; 
+            background: rgba(255,255,255,0.05); 
+            padding: 15px; 
+            border-radius: 10px; 
+            font-size: 12px; 
+        }
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; color: #888; padding: 8px; border-bottom: 1px solid #444; }
         td { padding: 8px; border-bottom: 1px solid #333; }
+
+        hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0; }
     </style>
 </head>
 <body>
 
-    <h2>🛡️ Verificador de Seguridad</h2>
-    <button id="btn-start">INICIAR ESCÁNER / SUBIR QR</button>
+    <h2>🛡️ Control de Acceso</h2>
+    <button id="btn-start">INICIAR ESCÁNER / CARGAR QR</button>
     
     <div id="reader" style="display:none"></div>
     <div id="res"></div>
 
     <div class="history-container">
-        <strong>HISTORIAL RECIENTE:</strong>
+        <strong style="color:var(--success)">RECENT LOGS:</strong>
         <table style="margin-top:10px;">
-            <thead><tr><th>Hora</th><th>Nombre</th><th>Placa</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Hora</th><th>Nombres</th><th>Placa</th><th>Estado</th></tr></thead>
             <tbody id="historial-body"></tbody>
         </table>
     </div>
 
 <script>
-    // LLAVE MAESTRA - ASEGÚRATE QUE SEA IGUAL EN EL GENERADOR
+    // === CONFIGURACIÓN MAESTRA ===
     const LLAVE_MAESTRA = "LLAVE_UNIVERSAL_99"; 
     const LISTA_NEGRA = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
     let html5QrcodeScanner = null;
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+    // Sistema de Sonidos
     function playTone(freq, type, duration) {
         try {
             const osc = audioCtx.createOscillator();
@@ -59,6 +142,7 @@
         } catch(e) {}
     }
 
+    // Manejo de Historial
     function addHistory(nombre, placa, estado, color) {
         const body = document.getElementById('historial-body');
         const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -66,61 +150,100 @@
             <td>${now}</td>
             <td>${nombre}</td>
             <td>${placa}</td>
-            <td style="color:${color}">${estado}</td>
+            <td style="color:${color}; font-weight:bold;">${estado}</td>
         </tr>`;
         body.innerHTML = row + body.innerHTML;
         if(body.rows.length > 5) body.deleteRow(5);
     }
 
+    // Función de Procesamiento Principal
     async function processQR(texto) {
         const div = document.getElementById('res');
         div.style.display = 'block';
         
         try {
-            // 1. DESENCRIPTAR
+            // 1. Desencriptación AES
             const bytes = CryptoJS.AES.decrypt(texto, LLAVE_MAESTRA);
             const decoded = bytes.toString(CryptoJS.enc.Utf8);
             
-            if(!decoded || decoded === "") {
-                throw new Error("ERROR_LLAVE");
-            }
+            if(!decoded || decoded === "") throw new Error("KEY_MISMATCH");
 
+            // 2. Fragmentación de Datos (Formato Pipe)
             const d = decoded.split('|');
             
-            // 2. CONSULTAR REVOCADOS
+            // 3. Consulta de Revocados (Gist)
             let revoked = [];
             try {
                 const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
                 revoked = await r.json();
-            } catch(e) {}
+            } catch(e) { console.warn("Modo Offline: No se pudo cargar lista negra."); }
 
-            // 3. MOSTRAR RESULTADO
+            // 4. Lógica de Validación y Renderizado
             if (revoked.includes(d[2])) {
-                playTone(100, 'sawtooth', 0.5);
-                div.className = "res bad";
-                div.innerHTML = "<h2>❌ REVOCADO</h2><p>Acceso denegado por el administrador.</p>";
+                playTone(100, 'sawtooth', 0.6);
+                div.className = "bad";
+                div.innerHTML = "<h2>❌ ACCESO REVOCADO</h2><p>Esta identificación ha sido BLOQUEADA por el sistema.</p>";
                 addHistory(d[1], d[6], "REVOCADO", "#e74c3c");
             } 
             else if (d[7] != "0" && Date.now() > parseInt(d[7])) {
-                playTone(300, 'sine', 0.2);
-                div.className = "res exp";
-                div.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>El permiso venció el: "+new Date(parseInt(d[7])).toLocaleDateString()+"</p>";
+                playTone(200, 'sine', 0.2); setTimeout(()=>playTone(200, 'sine', 0.2), 250);
+                div.className = "exp";
+                div.innerHTML = `
+                    <h2>⚠️ ACCESO NO PERMITIDO</h2>
+                    <p><strong>El permiso caducó el:</strong><br>${new Date(parseInt(d[7])).toLocaleDateString()}</p>
+                    <hr>
+                    <p>Favor contactar al administrador para renovación.</p>
+                `;
                 addHistory(d[1], d[6], "EXPIRADO", "#f1c40f");
             } 
             else {
                 playTone(880, 'sine', 0.3);
-                div.className = "res ok";
+                div.className = "ok";
                 div.innerHTML = `
-                    <h2>✅ PERMITIDO</h2>
-                    <p><strong>${d[0]} ${d[1]}</strong></p>
-                    <p>ID: ${d[2]} | Placa: <strong>${d[6]}</strong></p>
-                    <hr style="opacity:0.2">
-                    <small>Autorizado por: ${d[8]}</small>
+                    <div style="text-align:center; margin-bottom:10px;">
+                        <h2 style="color:white; border:none; margin:0;">✅ PERMITIDO</h2>
+                    </div>
+                    
+                    <div class="info-label">Titular:</div>
+                    <div class="info-value">${d[0]} ${d[1]}</div>
+                    
+                    <div style="display:grid; grid-template-columns: 1fr 1fr;">
+                        <div>
+                            <div class="info-label">ID / Cédula:</div>
+                            <div class="info-value">${d[2]}</div>
+                        </div>
+                        <div>
+                            <div class="info-label">Dependencia:</div>
+                            <div class="info-value">${d[3]}</div>
+                        </div>
+                    </div>
+
+                    <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:10px; border:1px solid rgba(255,255,255,0.1);">
+                        <div class="info-label" style="color:var(--success)">Ficha del Vehículo</div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; margin-top:5px;">
+                            <div>
+                                <div class="info-label">Tipo:</div>
+                                <div class="info-value">${d[4]}</div>
+                            </div>
+                            <div>
+                                <div class="info-label">Color:</div>
+                                <div class="info-value">${d[5]}</div>
+                            </div>
+                        </div>
+                        <div class="info-label">Placa:</div>
+                        <div class="plate-box">${d[6]}</div>
+                    </div>
+
+                    <hr>
+                    <div style="display:flex; justify-content:space-between; font-size:10px; opacity:0.6;">
+                        <span>Emitido por: ${d[8]}</span>
+                        <span>F: ${d[9]}</span>
+                    </div>
                 `;
                 addHistory(d[1], d[6], "PERMITIDO", "#2ecc71");
             }
 
-            // 4. APAGAR CÁMARA DESPUÉS DE PROCESAR
+            // Apagar cámara tras éxito
             if(html5QrcodeScanner) {
                 html5QrcodeScanner.clear();
                 document.getElementById('reader').style.display = 'none';
@@ -128,12 +251,12 @@
 
         } catch(e) {
             playTone(150, 'square', 0.5);
-            div.className = "res bad";
-            div.style.display = 'block';
-            div.innerHTML = "<h2>❌ ERROR</h2><p>El código QR no es válido para este sistema o la llave de seguridad no coincide.</p>";
+            div.className = "bad";
+            div.innerHTML = "<h2>❌ ERROR DE LECTURA</h2><p>El código QR no es válido, no pertenece a este sistema o está dañado.</p>";
         }
     }
 
+    // Botón de Inicio
     document.getElementById('btn-start').onclick = () => {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         document.getElementById('res').style.display = 'none';
@@ -141,8 +264,8 @@
         
         if(!html5QrcodeScanner) {
             html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-                fps: 10, 
-                qrbox: 250,
+                fps: 20, 
+                qrbox: {width: 280, height: 280},
                 rememberLastUsedCamera: true
             });
         }
