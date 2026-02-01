@@ -2,66 +2,61 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>VERIFICADOR V6 - PROFESIONAL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VERIFICADOR V6.1 - ESTABLE</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         :root { --success: #2ecc71; --error: #e74c3c; --warning: #f1c40f; --dark: #1a1a2e; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h2 { color: var(--success); text-transform: uppercase; letter-spacing: 2px; }
-        
-        #reader { width: 100%; max-width: 400px; border: 4px solid #333; border-radius: 12px; overflow: hidden; }
-        
-        #res { width: 100%; max-width: 400px; margin-top: 20px; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
-        .ok { background: #1b5e20; border-left: 10px solid var(--success); }
-        .bad { background: #7b1313; border-left: 10px solid var(--error); }
-        .exp { background: #855406; border-left: 10px solid var(--warning); }
-
-        button { padding: 15px 25px; background: var(--success); color: var(--dark); border: none; cursor: pointer; font-weight: bold; border-radius: 8px; font-size: 16px; margin-bottom: 20px; width: 100%; max-width: 400px; }
-        
-        /* Historial */
-        .history-container { width: 100%; max-width: 500px; margin-top: 30px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { text-align: left; border-bottom: 1px solid #444; padding: 8px; color: #888; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        h2 { color: var(--success); text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+        #reader { width: 100%; max-width: 400px; border: 4px solid #333; border-radius: 12px; overflow: hidden; background: #000; }
+        #res { width: 100%; max-width: 400px; margin-top: 20px; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.5); border-left: 10px solid; }
+        .ok { background: #1b5e20; border-color: var(--success); }
+        .bad { background: #7b1313; border-color: var(--error); }
+        .exp { background: #855406; border-color: var(--warning); }
+        button { padding: 15px 25px; background: var(--success); color: var(--dark); border: none; cursor: pointer; font-weight: bold; border-radius: 8px; font-size: 16px; margin-bottom: 20px; width: 100%; max-width: 400px; transition: 0.3s; }
+        button:hover { opacity: 0.9; transform: scale(0.98); }
+        .history-container { width: 100%; max-width: 500px; margin-top: 30px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: #888; padding: 8px; border-bottom: 1px solid #444; }
         td { padding: 8px; border-bottom: 1px solid #333; }
-        .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
     </style>
 </head>
 <body>
 
-    <h2>Escáner de Seguridad</h2>
-    <button id="btn-start">ACTIVAR CÁMARA</button>
+    <h2>🛡️ Verificador de Seguridad</h2>
+    <button id="btn-start">INICIAR ESCÁNER / SUBIR QR</button>
     
     <div id="reader" style="display:none"></div>
     <div id="res"></div>
 
     <div class="history-container">
-        <h3>Historial Reciente</h3>
-        <table>
+        <strong>HISTORIAL RECIENTE:</strong>
+        <table style="margin-top:10px;">
             <thead><tr><th>Hora</th><th>Nombre</th><th>Placa</th><th>Estado</th></tr></thead>
             <tbody id="historial-body"></tbody>
         </table>
     </div>
 
 <script>
+    // LLAVE MAESTRA - ASEGÚRATE QUE SEA IGUAL EN EL GENERADOR
     const LLAVE_MAESTRA = "LLAVE_UNIVERSAL_99"; 
     const LISTA_NEGRA = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
-    const scanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: 250 });
+    let html5QrcodeScanner = null;
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Función para generar sonidos sin archivos externos
     function playTone(freq, type, duration) {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {}
     }
 
     function addHistory(nombre, placa, estado, color) {
@@ -71,61 +66,87 @@
             <td>${now}</td>
             <td>${nombre}</td>
             <td>${placa}</td>
-            <td><span class="status-dot" style="background:${color}"></span>${estado}</td>
+            <td style="color:${color}">${estado}</td>
         </tr>`;
         body.innerHTML = row + body.innerHTML;
-        // Limitar a los últimos 10
-        if(body.rows.length > 10) body.deleteRow(10);
+        if(body.rows.length > 5) body.deleteRow(5);
     }
 
-    async function onScan(texto) {
+    async function processQR(texto) {
         const div = document.getElementById('res');
         div.style.display = 'block';
-
+        
         try {
+            // 1. DESENCRIPTAR
             const bytes = CryptoJS.AES.decrypt(texto, LLAVE_MAESTRA);
             const decoded = bytes.toString(CryptoJS.enc.Utf8);
-            if(!decoded) throw new Error();
+            
+            if(!decoded || decoded === "") {
+                throw new Error("ERROR_LLAVE");
+            }
 
             const d = decoded.split('|');
-            const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
-            const revok = await r.json();
+            
+            // 2. CONSULTAR REVOCADOS
+            let revoked = [];
+            try {
+                const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
+                revoked = await r.json();
+            } catch(e) {}
 
-            if (revok.includes(d[2])) {
-                playTone(100, 'sawtooth', 0.5); // Sonido Error
-                div.className = "bad";
-                div.innerHTML = "<h2>❌ REVOCADO</h2><p>Acceso denegado por seguridad.</p>";
+            // 3. MOSTRAR RESULTADO
+            if (revoked.includes(d[2])) {
+                playTone(100, 'sawtooth', 0.5);
+                div.className = "res bad";
+                div.innerHTML = "<h2>❌ REVOCADO</h2><p>Acceso denegado por el administrador.</p>";
                 addHistory(d[1], d[6], "REVOCADO", "#e74c3c");
             } 
             else if (d[7] != "0" && Date.now() > parseInt(d[7])) {
-                playTone(300, 'sine', 0.2); setTimeout(() => playTone(300, 'sine', 0.2), 300); // Sonido Advertencia
-                div.className = "exp";
-                div.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>Permiso vencido.</p>";
+                playTone(300, 'sine', 0.2);
+                div.className = "res exp";
+                div.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>El permiso venció el: "+new Date(parseInt(d[7])).toLocaleDateString()+"</p>";
                 addHistory(d[1], d[6], "EXPIRADO", "#f1c40f");
             } 
             else {
-                playTone(880, 'sine', 0.2); // Sonido Éxito
-                div.className = "ok";
+                playTone(880, 'sine', 0.3);
+                div.className = "res ok";
                 div.innerHTML = `
                     <h2>✅ PERMITIDO</h2>
                     <p><strong>${d[0]} ${d[1]}</strong></p>
-                    <p>ID: ${d[2]} | Placa: ${d[6]}</p>
+                    <p>ID: ${d[2]} | Placa: <strong>${d[6]}</strong></p>
+                    <hr style="opacity:0.2">
+                    <small>Autorizado por: ${d[8]}</small>
                 `;
-                addHistory(d[1], d[6], "OK", "#2ecc71");
+                addHistory(d[1], d[6], "PERMITIDO", "#2ecc71");
             }
-            scanner.clear();
-            document.getElementById('reader').style.display = 'none';
+
+            // 4. APAGAR CÁMARA DESPUÉS DE PROCESAR
+            if(html5QrcodeScanner) {
+                html5QrcodeScanner.clear();
+                document.getElementById('reader').style.display = 'none';
+            }
+
         } catch(e) {
             playTone(150, 'square', 0.5);
-            div.className = "bad";
-            div.innerHTML = "<h2>❌ ERROR</h2><p>QR no válido.</p>";
+            div.className = "res bad";
+            div.style.display = 'block';
+            div.innerHTML = "<h2>❌ ERROR</h2><p>El código QR no es válido para este sistema o la llave de seguridad no coincide.</p>";
         }
     }
 
     document.getElementById('btn-start').onclick = () => {
         if (audioCtx.state === 'suspended') audioCtx.resume();
+        document.getElementById('res').style.display = 'none';
         document.getElementById('reader').style.display = 'block';
-        scanner.render(onScan);
+        
+        if(!html5QrcodeScanner) {
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                fps: 10, 
+                qrbox: 250,
+                rememberLastUsedCamera: true
+            });
+        }
+        html5QrcodeScanner.render(processQR);
     };
 </script>
 </body>
