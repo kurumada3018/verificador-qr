@@ -2,95 +2,85 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>GENERADOR V4 - SEGURO</title>
+    <title>VERIFICADOR V5 - ALTA DEFINICIÓN</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a1a2e; color: #333; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; padding: 20px; border-radius: 10px; width: 100%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        input, select { width: 100%; padding: 10px; margin: 5px 0 15px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #e94560; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        #qr-box { text-align: center; margin-top: 20px; display: none; }
-        canvas { border: 10px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .ver { font-size: 10px; color: #ccc; text-align: center; }
+        body { font-family: sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
+        #reader { width: 100%; max-width: 400px; margin: auto; border: 3px solid #00ff00; background: black; }
+        #res { margin-top: 20px; padding: 20px; border-radius: 10px; display: none; text-align: left; }
+        .ok { background: #1b5e20; } .bad { background: #b71c1c; } .exp { background: #e65100; }
+        button { padding: 15px; background: #00ff00; color: black; border: none; cursor: pointer; width: 100%; max-width: 400px; font-weight: bold; border-radius: 5px; }
+        /* Panel de depuración */
+        #debug-panel { background: #222; color: #00ff00; padding: 10px; font-family: monospace; font-size: 11px; margin-top: 20px; text-align: left; word-break: break-all; border-radius: 5px; }
     </style>
 </head>
 <body>
-<div class="card">
-    <div id="login-section">
-        <h2 style="text-align:center">Admin V4</h2>
-        <input type="text" id="user" placeholder="Usuario">
-        <input type="password" id="pass" placeholder="Contraseña">
-        <button onclick="login()">INGRESAR</button>
+    <h2>ESCÁNER V5</h2>
+    <button id="btn">INICIAR ESCÁNER HD</button>
+    <div id="reader" style="display:none; margin-top:20px;"></div>
+    <div id="res"></div>
+    
+    <div id="debug-panel">
+        <strong>MONITOR DEL SISTEMA:</strong><br>
+        1. Esperando escaneo...
     </div>
-
-    <div id="app-section" style="display:none">
-        <h2 style="text-align:center">Nuevo Registro</h2>
-        <label>Grado:</label><input type="text" id="g">
-        <label>Nombres:</label><input type="text" id="n">
-        <label>ID:</label><input type="text" id="i">
-        <label>Dependencia:</label><input type="text" id="d">
-        <label>Vehículo:</label><select id="t"><option>Carro</option><option>Moto</option><option>Bici</option></select>
-        <label>Color:</label><input type="text" id="c">
-        <label>Placa:</label><input type="text" id="p">
-        <label>Expira:</label><input type="date" id="e">
-        <button onclick="generar()">GENERAR QR</button>
-        <div id="qr-box">
-            <canvas id="canvas"></canvas>
-            <p>Haz clic derecho en el QR para guardar</p>
-        </div>
-    </div>
-    <p class="ver">Versión de Seguridad: 4.0.1 (Industrial)</p>
-</div>
 
 <script>
     const LLAVE_MAESTRA = "LLAVE_UNIVERSAL_99"; 
-    const GIST_URL = 'https://gist.githubusercontent.com/kurumada3018/2348f46cc2f7fd407687b1ddd72b8398/raw/79fd77d6d8be1d8332c62288a63ce8bab783e9a8/usuarios_generador.json';
-    let admin = "";
+    const LISTA_NEGRA = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
-    async function login() {
-        const u = document.getElementById('user').value;
-        const p = document.getElementById('pass').value;
-        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(p)).then(b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''));
+    // CONFIGURACIÓN HD PARA LEER QRs COMPLEJOS
+    const scanner = new Html5QrcodeScanner("reader", { 
+        fps: 20, 
+        qrbox: { width: 300, height: 300 }, // Caja de lectura más grande
+        aspectRatio: 1.0,
+        disableFlip: false // Ayuda si la cámara es frontal
+    });
+
+    const debug = document.getElementById('debug-panel');
+
+    async function alEscanear(texto) {
+        debug.innerHTML += `<br><br><strong>2. QR DETECTADO:</strong> ${texto.substring(0,30)}...`;
+        const div = document.getElementById('res');
+        div.style.display = 'block';
+
         try {
-            const r = await fetch(GIST_URL + '?t=' + Date.now());
-            const data = await r.json();
-            if(data[u] === hash) {
-                admin = u;
-                document.getElementById('login-section').style.display='none';
-                document.getElementById('app-section').style.display='block';
-            } else { alert("Acceso denegado"); }
-        } catch(e) { alert("Error de red"); }
+            // DESENCRIPTAR
+            const bytes = CryptoJS.AES.decrypt(texto, LLAVE_MAESTRA);
+            const decoded = bytes.toString(CryptoJS.enc.Utf8);
+            
+            if(!decoded) throw new Error("Llave incorrecta o texto corrupto");
+            debug.innerHTML += `<br><strong>3. DESENCRIPTADO OK:</strong> ${decoded}`;
+
+            const d = decoded.split('|');
+            
+            const r = await fetch(LISTA_NEGRA + '?t=' + Date.now());
+            const revok = await r.json();
+
+            if (revok.includes(d[2])) {
+                div.className = "bad";
+                div.innerHTML = "<h2>❌ ACCESO REVOCADO</h2><p>Identificación bloqueada.</p>";
+            } else {
+                div.className = "ok";
+                div.innerHTML = `
+                    <h2>✅ PERMITIDO</h2>
+                    <p><strong>${d[0]} ${d[1]}</strong></p>
+                    <p>ID: ${d[2]}</p>
+                    <p>Placa: <strong>${d[6]}</strong></p>
+                `;
+            }
+        } catch(e) {
+            div.className = "bad";
+            div.innerHTML = "<h2>❌ ERROR</h2><p>Código QR no válido.</p>";
+            debug.innerHTML += `<br><strong style="color:red">ERROR FATAL: ${e.message}</strong>`;
+        }
     }
 
-    function generar() {
-        // UNIÓN DE DATOS EN FORMATO ULTRA-COMPACTO
-        const exp = document.getElementById('e').value;
-        const dataStr = [
-            document.getElementById('g').value,
-            document.getElementById('n').value,
-            document.getElementById('i').value,
-            document.getElementById('d').value,
-            document.getElementById('t').value,
-            document.getElementById('c').value,
-            document.getElementById('p').value,
-            exp ? new Date(exp + 'T23:59:59').getTime() : 0,
-            admin
-        ].join('|');
-
-        // ENCRIPTACIÓN AES
-        const cifrado = CryptoJS.AES.encrypt(dataStr, LLAVE_MAESTRA).toString();
-        
-        // CONFIGURACIÓN DE QR PARA MÁXIMA LECTURA
-        new QRious({
-            element: document.getElementById('canvas'),
-            value: cifrado,
-            size: 500,
-            level: 'L', // Nivel L permite puntos más grandes (mejor para archivos)
-            padding: 40 // Margen blanco crítico para que el lector lo vea
-        });
-        document.getElementById('qr-box').style.display = 'block';
-    }
+    document.getElementById('btn').onclick = () => {
+        document.getElementById('reader').style.display = 'block';
+        scanner.render(alEscanear);
+    };
 </script>
 </body>
 </html>
