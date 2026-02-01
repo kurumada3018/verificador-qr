@@ -2,85 +2,78 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Verificador Seguro</title>
+    <title>VERIFICADOR</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
-        #reader { width: 100%; max-width: 400px; margin: auto; border: 2px solid #fff; }
-        #result { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; text-align: left; }
-        .success { background: #1b5e20; }
-        .error { background: #b71c1c; }
-        .warning { background: #e65100; }
-        button { padding: 15px; background: #0277bd; color: white; border: none; cursor: pointer; width: 100%; max-width: 400px; font-weight: bold; }
+        #reader { width: 100%; max-width: 450px; margin: auto; border: 2px solid white; background: black; }
+        #res { margin-top: 20px; padding: 20px; border-radius: 10px; display: none; text-align: left; }
+        .ok { background: #1b5e20; } .bad { background: #b71c1c; } .exp { background: #e65100; }
+        button { padding: 15px; background: #0277bd; color: white; border: none; cursor: pointer; width: 100%; max-width: 450px; font-weight: bold; }
     </style>
 </head>
 <body>
-
-    <h1>Verificador de Acceso</h1>
-    <button id="start-btn">INICIAR CÁMARA</button>
+    <h2>ESCÁNER DE ACCESO</h2>
+    <button id="btn">ACTIVAR CÁMARA</button>
     <div id="reader" style="display:none; margin-top:20px;"></div>
-    <div id="result"></div>
+    <div id="res"></div>
 
 <script>
-    // --- CONFIGURACIÓN: DEBE SER IGUAL AL GENERADOR ---
-    const SECRET_KEY = "123456"; 
-    const REVOKED_URL = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
+    const LLAVE = "SISTEMA_SEGURIDAD_2024"; // DEBE SER IGUAL AL GENERADOR
+    const REVOCADOS = 'https://gist.githubusercontent.com/kurumada3018/383b3a95a70bce63100bbe4149442fc3/raw/beac26438655e38a21b32db55b5444eb5fe585fd/lista_revocados.json';
 
     const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
 
-    async function onScanSuccess(decodedText) {
+    async function onScan(txt) {
         scanner.clear();
         document.getElementById('reader').style.display = 'none';
-        const resDiv = document.getElementById('result');
-        resDiv.style.display = 'block';
+        const div = document.getElementById('res');
+        div.style.display = 'block';
 
         try {
-            // Desencriptar usando la llave definida arriba
-            const bytes = CryptoJS.AES.decrypt(decodedText, SECRET_KEY);
-            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            // Desencriptar
+            const bytes = CryptoJS.AES.decrypt(txt, LLAVE);
+            const raw = bytes.toString(CryptoJS.enc.Utf8);
+            if(!raw) throw new Error();
 
-            if (!decrypted) throw new Error("Llave incorrecta");
-
-            const d = JSON.parse(decrypted);
+            // Descomprimir cadena |
+            const d = raw.split('|');
             
-            // Consultar lista de revocados
-            const resp = await fetch(REVOKED_URL + '?t=' + Date.now());
-            const revoked = await resp.json();
+            const r = await fetch(REVOCADOS + '?t=' + Date.now());
+            const list = await r.json();
 
-            if (revoked.includes(d.i)) {
-                resDiv.className = "error";
-                resDiv.innerHTML = "<h2>❌ ACCESO DENEGADO</h2><p>Identidad Revocada en el sistema.</p>";
+            if (list.includes(d[2])) { // d[2] es el ID
+                div.className = "bad";
+                div.innerHTML = "<h2>❌ REVOCADO</h2><p>Acceso denegado por seguridad.</p>";
             } 
-            else if (d.e !== 0 && Date.now() > d.e) {
-                resDiv.className = "warning";
-                resDiv.innerHTML = `<h2>⚠️ ACCESO NO PERMITIDO</h2><p>El permiso expiró el: ${new Date(d.e).toLocaleDateString()}</p><hr><p>CONTACTE AL ADMINISTRADOR.</p>`;
+            else if (d[7] != 0 && Date.now() > parseInt(d[7])) { // d[7] es Expiración
+                div.className = "exp";
+                div.innerHTML = "<h2>⚠️ EXPIRADO</h2><p>El permiso caducó el: "+ new Date(parseInt(d[7])).toLocaleDateString() +"</p>";
             } 
             else {
-                resDiv.className = "success";
-                resDiv.innerHTML = `
-                    <h2>✅ ACCESO PERMITIDO</h2>
-                    <p><strong>Grado:</strong> ${d.g}</p>
-                    <p><strong>Nombres:</strong> ${d.n}</p>
-                    <p><strong>ID:</strong> ${d.i}</p>
-                    <p><strong>Dependencia:</strong> ${d.d}</p>
+                div.className = "ok";
+                div.innerHTML = `
+                    <h2>✅ PERMITIDO</h2>
+                    <p><strong>${d[0]} ${d[1]}</strong></p>
+                    <p>ID: ${d[2]} | Dep: ${d[3]}</p>
                     <hr>
-                    <p><strong>Vehículo:</strong> ${d.t} (${d.c})</p>
-                    <p><strong>Placa:</strong> ${d.p}</p>
+                    <p>Vehículo: ${d[4]} - ${d[5]}</p>
+                    <p>Placa: <strong>${d[6]}</strong></p>
                     <hr>
-                    <small>Audit: ${d.a} - ${d.f}</small>
+                    <small>Emitido por: ${d[8]} el ${d[9]}</small>
                 `;
             }
-        } catch (e) {
-            resDiv.className = "error";
-            resDiv.innerHTML = "<h2>❌ ERROR</h2><p>Llave de seguridad incorrecta o código QR dañado.</p>";
+        } catch(e) {
+            div.className = "bad";
+            div.innerHTML = "<h2>❌ ERROR</h2><p>Código no válido o llave incorrecta.</p>";
         }
     }
 
-    document.getElementById('start-btn').onclick = () => {
+    document.getElementById('btn').onclick = () => {
         document.getElementById('reader').style.display = 'block';
-        document.getElementById('result').style.display = 'none';
-        scanner.render(onScanSuccess);
+        document.getElementById('res').style.display = 'none';
+        scanner.render(onScan);
     };
 </script>
 </body>
